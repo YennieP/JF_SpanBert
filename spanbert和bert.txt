@@ -1,0 +1,70 @@
+一、BERT模型的原理和流程
+
+BERT（Bidirectional Encoder Representations from Transformers）是由Google在2018年提出的一种预训练的语言模型。BERT的核心思想是通过双向Transformer编码器来理解句子中的上下文关系，使得模型能够捕捉到更全面的语言信息。
+
+1. BERT的基本原理
+
+- 双向性（Bidirectionality）: BERT的核心创新在于它是一个双向模型，即在对每个单词进行编码时，模型可以同时利用这个单词前面的和后面的词语信息。这与传统的单向模型（如GPT）不同，后者只能从左到右或从右到左处理句子。
+
+- Transformer架构: BERT基于Transformer模型的编码器部分。Transformer模型由多层自注意力（self-attention）和前馈神经网络（feedforward neural network）组成，能够有效地捕捉句子中远距离单词之间的关系。
+
+- 预训练任务:
+  - Masked Language Model (MLM): 在预训练过程中，BERT会随机遮蔽（mask）句子中的一些单词，然后让模型预测这些被遮蔽的单词。这迫使模型必须利用句子中的上下文来推测被遮蔽的词语。
+  - Next Sentence Prediction (NSP): 另一个预训练任务是预测两个句子之间的关系。模型会输入成对的句子，并判断第二个句子是否是第一个句子的下一句。这个任务帮助模型理解句子之间的关系。
+
+2. BERT的流程
+
+1. 输入表示:
+   - 输入由三个部分组成：Token Embeddings（词嵌入）、Segment Embeddings（句子嵌入，用于区分不同句子）、Position Embeddings（位置嵌入，用于保留单词的顺序信息）。
+
+2. 编码层:
+   - BERT模型的主体是多层Transformer编码器，每层由多头自注意力机制和前馈神经网络组成。模型通过这些编码层来捕捉句子中的上下文信息。
+
+3. 输出:
+   - 预训练后的BERT模型可以通过微调（fine-tuning）来应用于各种下游任务，如文本分类、问答、命名实体识别等。
+
+
+
+
+二、SpanBERT的原理和流程
+
+SpanBERT是BERT的一种变体，专门设计用于提高在包含片段（spans）的任务中的表现，如问答（QA）任务。SpanBERT对BERT模型进行了改进，以更好地捕捉连续词组（spans）中的信息。
+
+1. SpanBERT的基本原理
+
+- Span Boundary Objective (SBO): SpanBERT引入了一种新的预训练目标，称为Span Boundary Objective。与BERT中的MLM不同，SpanBERT随机遮蔽整个连续片段（span），而不仅仅是单个词语。然后，模型需要从片段的边界词语来预测片段的内容。
+
+- 没有NSP任务: SpanBERT取消了BERT中的Next Sentence Prediction任务，因为在一些实验中发现NSP并没有显著提高模型性能。
+
+2. SpanBERT的流程
+
+1. 输入表示:
+   - 与BERT相似，SpanBERT的输入表示包括Token Embeddings、Segment Embeddings和Position Embeddings。
+
+2. 编码层:
+   - SpanBERT使用与BERT相同的Transformer编码器层结构，但通过引入Span Boundary Objective来增强对连续词组的理解。
+
+3. 输出:
+   - 经过预训练的SpanBERT模型，能够更好地应用于需要处理文本片段的任务，如问答和命名实体识别。
+
+
+
+
+
+三、BERT与SpanBERT的对比
+
+| 特性                      | BERT                                                 | SpanBERT                                               |
+
+|------------------------------|----------------------------------------------------------|------------------------------------------------------------|
+
+| 预训练任务               | Masked Language Model (MLM), Next Sentence Prediction (NSP) | Masked Language Model (MLM), Span Boundary Objective (SBO)  |
+
+| 面向任务                 | 广泛适用于各种NLP任务                                      | 特别针对需要处理文本片段（spans）的任务                       |
+
+| 片段处理能力             | 片段处理能力较弱，只处理单个词语                           | 强化了片段处理能力，能够更好地理解和预测连续词组           |
+
+| 使用场景                 | 文本分类、情感分析、命名实体识别、问答等广泛的NLP任务       | 特别适用于需要处理文本片段的任务，如问答、命名实体识别      |
+
+| Next Sentence Prediction | 包含NSP任务                                               | 取消了NSP任务                                               |
+
+总结来说，BERT是一个强大的通用语言模型，而SpanBERT则在BERT的基础上进行了专门化改进，以更好地处理文本片段的任务。这使得SpanBERT在某些特定任务上能够表现得更加出色。
