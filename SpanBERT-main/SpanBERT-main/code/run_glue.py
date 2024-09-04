@@ -24,11 +24,12 @@ from pytorch_pretrained_bert.modeling import BertForSequenceClassification
 from pytorch_pretrained_bert.tokenization import BertTokenizer
 from pytorch_pretrained_bert.optimization import BertAdam, warmup_linear
 
-
+"""文件名设置"""
 PRED_FILE = "predictions.tsv"
 EVAL_FILE = "eval_results.txt"
 TEST_FILE = "test_results.txt"
 
+"""日志配置"""
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s - %(message)s',
                     datefmt='%m/%d/%Y %H:%M:%S',
                     level=logging.INFO)
@@ -36,7 +37,13 @@ logger = logging.getLogger(__name__)
 
 
 class InputExample(object):
-    """A single training/test example for simple sequence classification."""
+    """
+    A single training/test example for simple sequence classification.
+
+    这个类用于表示单个训练/测试示例,特别是在简单的序列分类任务中。它封装了每个示例的基本信息,如唯一标识符(guid)、第一个序列的未分词文本(text_a)、可选的第二个序列的未分词文本(text_b),以及该示例的标签(label,可选)。
+
+    第一个序列的未分词文本: 当我们提到"第一个序列的未分词文本"时,我们通常是在谈论一段原始文本数据,这段数据还没有被转换成模型能够直接处理的格式(比如词汇索引或词嵌入)。这里的"序列"指的是一系列有序的元素,在自然语言处理中,这些元素通常是单词或字符。
+    """
 
     def __init__(self, guid, text_a, text_b=None, label=None):
         """Constructs a InputExample.
@@ -57,24 +64,42 @@ class InputExample(object):
 
 
 class InputFeatures(object):
-    """A single set of features of data."""
+    """
+    A single set of features of data.
+    
+    它用于表示单个数据集的特征集。在自然语言处理(NLP)任务中,尤其是在使用像BERT这样的预训练模型进行微调时,数据需要被转换成特定的格式,以便模型能够理解和处理。InputFeatures类就封装了这种转换后的数据格式。
+    """
 
     def __init__(self, input_ids, input_mask, segment_ids, label_id):
+        # 这是一个整数列表(或其他可迭代对象),表示输入文本的词汇索引。
         self.input_ids = input_ids
+        # 一个整数列表,用于指示哪些元素是实际的输入,哪些元素是填充(padding)用于保持序列长度一致的
         self.input_mask = input_mask
+        # 整数列表,用于区分序列中的不同部分(例如,在问答任务中,问题和答案可能被视为不同的部分)
         self.segment_ids = segment_ids
+        # 一个整数,表示该数据集的标签或目标的索引
         self.label_id = label_id
 
 
 class DataProcessor(object):
-    """Base class for data converters for sequence classification data sets."""
+    """
+    Base class for data converters for sequence classification data sets.
+    
+    旨在为序列分类数据集的数据转换器提供一个基础框架。这个类本身不直接用于数据处理,而是作为其他具体数据处理器(如用于特定数据集的子类)的模板。通过实现这个基类中的抽象方法,子类可以定制如何读取和处理特定数据集的训练集、开发集(也称为验证集)以及获取数据集的标签列表。
+    """
 
     def get_train_examples(self, data_dir):
-        """Gets a collection of `InputExample`s for the train set."""
+        """
+        Gets a collection of `InputExample`s for the train set.
+        从给定的data_dir(数据集目录)中读取训练集的数据,并返回一个包含InputExample实例的集合
+        """
         raise NotImplementedError()
 
     def get_dev_examples(self, data_dir):
-        """Gets a collection of `InputExample`s for the dev set."""
+        """
+        Gets a collection of `InputExample`s for the dev set.
+        读取开发集(或验证集)的数据
+        """
         raise NotImplementedError()
 
     def get_labels(self):
@@ -83,7 +108,11 @@ class DataProcessor(object):
 
     @classmethod
     def _read_tsv(cls, input_file, quotechar=None):
-        """Reads a tab separated value file."""
+        """
+        Reads a tab separated value file.
+        读取制表符分隔值(TSV)文件: 
+        接受一个输入文件路径input_file和一个可选的quotechar参数(用于处理被引号包围的字段),然后使用csv.reader以制表符为分隔符读取文件内容,并将每行作为一个列表返回
+        """
         with open(input_file, "r", encoding="utf-8") as f:
             reader = csv.reader(f, delimiter="\t", quotechar=quotechar)
             lines = []
@@ -95,7 +124,13 @@ class DataProcessor(object):
 
 
 class MrpcProcessor(DataProcessor):
-    """Processor for the MRPC data set (GLUE version)."""
+    """
+    Processor for the MRPC data set (GLUE version).
+    
+    MrpcProcessor类继承自DataProcessor类,是专门为处理MRPC(Microsoft Research Paraphrase Corpus)数据集(特别是GLUE版本的MRPC)而设计的。
+    
+    MRPC是一个用于评估句子对语义等价性(即判断两个句子是否具有相同的含义)的基准数据集。这个类通过重写DataProcessor基类中的方法,提供了从MRPC数据集的TSV文件中读取训练集、开发集(验证集)和测试集数据,并创建InputExample实例的功能。
+    """
 
     def get_train_examples(self, data_dir):
         """See base class."""
@@ -118,6 +153,7 @@ class MrpcProcessor(DataProcessor):
         return ["0", "1"]
 
     def _create_examples(self, lines, set_type):
+        """这是一个辅助方法,用于从给定的行列表(lines)中创建InputExample实例"""
         examples = []
         for (i, line) in enumerate(lines):
             if i == 0:
@@ -132,7 +168,11 @@ class MrpcProcessor(DataProcessor):
 
 
 class MnliProcessor(DataProcessor):
-    """Processor for the MultiNLI data set (GLUE version)."""
+    """
+    Processor for the MultiNLI data set (GLUE version).
+
+    MnliProcessor类继承自DataProcessor类,专门用于处理MultiNLI(Multi-Genre Natural Language Inference)数据集(特别是GLUE版本的MultiNLI)。MultiNLI是一个用于评估自然语言推理(NLI)系统性能的大型数据集,它包含了来自不同来源和领域的句子对,每个句子对都被标注为三种关系之一：蕴含(entailment)、矛盾(contradiction)或中立(neutral)。
+    """
 
     def get_train_examples(self, data_dir):
         """See base class."""
@@ -186,7 +226,14 @@ class MnliProcessor(DataProcessor):
 
 
 class ColaProcessor(DataProcessor):
-    """Processor for the CoLA data set (GLUE version)."""
+    """
+    Processor for the CoLA data set (GLUE version).
+    
+    ColaProcessor类继承自DataProcessor类,专门用于处理CoLA(Corpus of Linguistic Acceptability)数据集(特别是GLUE版本的CoLA)。CoLA数据集是一个用于评估语言模型在句子级可接受性判断任务上性能的数据集。它包含了一系列英语句子,每个句子都被标注为可接受(label为1)或不可接受(label为0)
+
+    句子级可接受性判断任务: 
+    这种任务要求系统或模型能够判断给定的句子在自然语言环境中是否被认为是合适的、可理解的或符合语言规范的。
+    """
 
     def get_train_examples(self, data_dir):
         """See base class."""
@@ -225,7 +272,10 @@ class ColaProcessor(DataProcessor):
 
 
 class Sst2Processor(DataProcessor):
-    """Processor for the SST-2 data set (GLUE version)."""
+    """Processor for the SST-2 data set (GLUE version).
+    
+    Sst2Processor类继承自DataProcessor类,专门用于处理SST-2(Stanford Sentiment Treebank version 2)数据集(特别是GLUE版本的SST-2)。SST-2是一个情感分类数据集,包含电影评论的句子及其对应的情感标签(正面或负面)。
+    """
 
     def get_train_examples(self, data_dir):
         """See base class."""
@@ -264,7 +314,13 @@ class Sst2Processor(DataProcessor):
 
 
 class StsbProcessor(DataProcessor):
-    """Processor for the STS-B data set (GLUE version)."""
+    """
+    Processor for the STS-B data set (GLUE version).
+
+    StsbProcessor类继承自DataProcessor类,专门用于处理STS-B(Semantic Textual Similarity Benchmark)数据集(特别是GLUE版本的STS-B)。
+    
+    STS-B是一个用于评估模型在理解两个句子之间语义相似度任务上的数据集。
+    """
 
     def get_train_examples(self, data_dir):
         """See base class."""
@@ -300,7 +356,10 @@ class StsbProcessor(DataProcessor):
 
 
 class QqpProcessor(DataProcessor):
-    """Processor for the QQP data set (GLUE version)."""
+    """Processor for the QQP data set (GLUE version).
+    
+    QqpProcessor类继承自DataProcessor类,专门用于处理QQP(Quora Question Pairs)数据集(特别是GLUE版本的QQP)。QQP数据集包含来自Quora网站的问题对,以及一个标签,指示这些问题对是否是重复的。
+    """
 
     def get_train_examples(self, data_dir):
         """See base class."""

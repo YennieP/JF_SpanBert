@@ -1,0 +1,15 @@
+GLUE数据集网址: https://gluebenchmark.com/tasks
+
+Glue数据集官网: https://github.com/nyu-mll/GLUE-baselines
+
+SQuAD数据集网址: https://rajpurkar.github.io/SQuAD-explorer/#:~:text=What%20is%20SQuAD?%20Stanford%20Question
+
+SQuAD非官网: https://paperswithcode.com/dataset/squad#:~:text=In%20SQuAD,%20the%20correct%20answers%20of
+
+TACRED官网数据集: https://github.com/yuhaozhang/tacred-relation
+
+TACRED非官网: https://paperswithcode.com/dataset/tacred#:~:text=TACRED%20is%20a%20large-scale%20relation
+
+MRQA (应该是官网): https://mrqa.github.io/2019/shared.html#:~:text=MRQA%202019%20Shared%20Task.%20The%202019%20MRQA#:~:text=MRQA%202019%20Shared%20Task.%20The%202019%20MRQA
+
+MRQA(非官网): https://paperswithcode.com/dataset/mrqa-2019#:~:text=The%20MRQA%20(Machine%20Reading%20for%20Question
