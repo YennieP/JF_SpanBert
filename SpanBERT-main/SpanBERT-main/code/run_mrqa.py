@@ -24,10 +24,12 @@ from pytorch_pretrained_bert.optimization import BertAdam, warmup_linear
 from pytorch_pretrained_bert.tokenization import BasicTokenizer, BertTokenizer
 from mrqa_official_eval import exact_match_score, f1_score, metric_max_over_ground_truths
 
+"""定义文件路径"""
 PRED_FILE = "predictions.json"
 EVAL_FILE = "eval_results.txt"
 TEST_FILE = "test_results.txt"
 
+"""配置日志记录"""
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s - %(message)s',
                     datefmt='%m/%d/%Y %H:%M:%S',
                     level=logging.INFO)
@@ -38,6 +40,12 @@ class MRQAExample(object):
     """
     A single training/test example for the MRQA dataset.
     For examples without an answer, the start and end position are -1.
+
+    MRQAExample类是用来表示机器阅读理解问答(Machine Reading Comprehension for Question Answering, MRQA)数据集中的单个训练或测试示例的。
+    
+    这个类定义了一个问答示例的基本结构,包括问题ID、问题文本、文档分词(即文档被分割成的一系列词或标记)、原始答案文本(如果有的话),以及答案在文档分词中的起始和结束位置(这两个位置用于确定答案的具体范围)
+
+    它提供了一种结构化的方式来存储和访问问答示例的信息
     """
 
     def __init__(self,
@@ -71,7 +79,11 @@ class MRQAExample(object):
 
 
 class InputFeatures(object):
-    """A single set of features of data."""
+    """
+    A single set of features of data.
+    
+    InputFeatures 类是用于表示单个数据特征集合的类,这些数据特征通常用于机器学习或深度学习模型的输入。在机器阅读理解(Machine Reading Comprehension, MRC)或类似的任务中,这个类可能用于封装从原始文本数据(如问题和文档)转换而来的、模型可以直接处理的特征。
+    """
 
     def __init__(self,
                  unique_id,
@@ -88,28 +100,35 @@ class InputFeatures(object):
         self.unique_id = unique_id
         self.example_index = example_index
         self.doc_span_index = doc_span_index
-        self.tokens = tokens
-        self.token_to_orig_map = token_to_orig_map
-        self.token_is_max_context = token_is_max_context
-        self.input_ids = input_ids
-        self.input_mask = input_mask
-        self.segment_ids = segment_ids
+        self.tokens = tokens # 标记列表
+        self.token_to_orig_map = token_to_orig_map # 标记到原始索引的映射
+        self.token_is_max_context = token_is_max_context # 标记是否是最大上下文,多个文档片段中,某些标记可能比其他标记包含更多上下文信息
+        self.input_ids = input_ids # 将标记转换为模型可识别的ID
+        self.input_mask = input_mask # 指示哪些位置是真实标记,哪些位置是填充标记
+        self.segment_ids = segment_ids # 用于区分查询和文档标记,通常在模型中使用来区分两种不同类型的输入
         self.start_position = start_position
         self.end_position = end_position
 
 
 def read_mrqa_examples(input_file, is_training):
-    """Read a MRQA json file into a list of MRQAExample."""
+    """
+    Read a MRQA json file into a list of MRQAExample.
+    
+    这段代码定义了一个函数 read_mrqa_examples,它的目的是从一个MRQA格式的JSON文件中读取数据,并将这些数据转换为MRQAExample对象的列表。这个函数特别用于处理训练或测试数据,具体取决于is_training参数的值。
+    """
+    # 打开并读取文件
     with gzip.GzipFile(input_file, 'r') as reader:
         # skip header
         content = reader.read().decode('utf-8').strip().split('\n')[1:]
         input_data = [json.loads(line) for line in content]
 
+    # 辅助函数: 用于检查给定的字符是否是空白字符
     def is_whitespace(c):
         if c == " " or c == "\t" or c == "\r" or c == "\n" or ord(c) == 0x202F:
             return True
         return False
 
+    # 处理数据
     examples = []
     num_answers = 0
     for i, entry in enumerate(input_data):
@@ -119,6 +138,8 @@ def read_mrqa_examples(input_file, is_training):
         doc_tokens = []
         char_to_word_offset = []
         prev_is_whitespace = True
+
+        # 对于每个条目,首先处理文档文本(paragraph_text),将其分词为doc_tokens列表,并构建char_to_word_offset列表,该列表将文档中的每个字符位置映射到其对应的分词索引。
         for c in paragraph_text:
             if is_whitespace(c):
                 prev_is_whitespace = True
@@ -130,12 +151,15 @@ def read_mrqa_examples(input_file, is_training):
                 prev_is_whitespace = False
             char_to_word_offset.append(len(doc_tokens) - 1)
 
+        # 对于每个问答对,提取问题ID(qid)、问题文本(question)和(可选的)答案信息。
         for qa in entry["qas"]:
             qas_id = qa["qid"]
             question_text = qa["question"]
             start_position = None
             end_position = None
             orig_answer_text = None
+
+            # 如果是在训练模式下(is_training=True),则解析答案信息(detected_answers),找到第一个答案的字符跨度(char_spans),并据此计算答案在分词列表中的起始和结束位置。同时,计算并更新答案的总数(num_answers)。
             if is_training:
                 answers = qa["detected_answers"]
                 # import ipdb
@@ -152,26 +176,36 @@ def read_mrqa_examples(input_file, is_training):
                 question_text=question_text,
                 doc_tokens=doc_tokens,
                 orig_answer_text=orig_answer_text,
-                start_position=start_position,
+                start_position=start_position, # 表示答案在输入序列中的位置。
                 end_position=end_position)
             examples.append(example)
+    
+    # 日志记录
     logger.info('Num avg answers: {}'.format(num_answers / len(examples)))
     return examples
 
 
 def convert_examples_to_features(examples, tokenizer, max_seq_length,
                                  doc_stride, max_query_length, is_training):
-    """Loads a data file into a list of `InputBatch`s."""
+    """
+    Loads a data file into a list of `InputBatch`s.
+    
+    它的主要作用是将原始数据(例如,问题和文档对)转换为模型训练或推理所需的特征格式。
+
+    convert_examples_to_features：这个函数接收原始数据(examples),一个分词器(tokenizer),以及一些配置参数(如最大序列长度max_seq_length、文档步长doc_stride、最大查询长度max_query_length和是否训练is_training),然后将这些数据转换为一系列InputBatch对象(这里实际上是InputFeatures对象列表)
+    """
 
     unique_id = 1000000000
 
     features = []
     for (example_index, example) in enumerate(examples):
+        # 查询分词：将查询(问题)文本通过分词器转换为标记列表,并裁剪到最大长度
         query_tokens = tokenizer.tokenize(example.question_text)
 
         if len(query_tokens) > max_query_length:
             query_tokens = query_tokens[0:max_query_length]
 
+        # 文档分词: 将文档文本通过分词器转换为子标记列表,并构建原始索引到标记索引的映射。
         tok_to_orig_index = []
         orig_to_tok_index = []
         all_doc_tokens = []
@@ -182,6 +216,7 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
                 tok_to_orig_index.append(i)
                 all_doc_tokens.append(sub_token)
 
+        # 处理起始和结束位置: 在训练模式下,根据原始答案的起始和结束位置,转换为标记索引的起始和结束位置,并可能进行优化。
         tok_start_position = None
         tok_end_position = None
         if is_training:
@@ -203,6 +238,7 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
         # We can have documents that are longer than the maximum sequence length.
         # To deal with this we do a sliding window approach, where we take chunks
         # of the up to our max length with a stride of `doc_stride`.
+        # 滑动窗口处理长文档: 如果文档过长,无法一次性放入模型中,则使用滑动窗口方法将其分割成多个子序列。
         _DocSpan = collections.namedtuple(  # pylint: disable=invalid-name
             "DocSpan", ["start", "length"])
         doc_spans = []
@@ -218,9 +254,9 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
 
         for (doc_span_index, doc_span) in enumerate(doc_spans):
             tokens = []
-            token_to_orig_map = {}
-            token_is_max_context = {}
-            segment_ids = []
+            token_to_orig_map = {} # 标记到原始索引的映射
+            token_is_max_context = {} # 标记是否是最大上下文,多个文档片段中,某些标记可能比其他标记包含更多上下文信息
+            segment_ids = [] # 用于区分查询和文档标记,通常在模型中使用来区分两种不同类型的输入
             tokens.append("[CLS]")
             segment_ids.append(0)
             for token in query_tokens:
@@ -241,11 +277,11 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
             tokens.append("[SEP]")
             segment_ids.append(1)
 
-            input_ids = tokenizer.convert_tokens_to_ids(tokens)
+            input_ids = tokenizer.convert_tokens_to_ids(tokens) # 将标记转换为模型可识别的ID
 
             # The mask has 1 for real tokens and 0 for padding tokens. Only real
             # tokens are attended to.
-            input_mask = [1] * len(input_ids)
+            input_mask = [1] * len(input_ids) # 指示哪些位置是真实标记,哪些位置是填充标记
 
             # Zero-pad up to the sequence length.
             while len(input_ids) < max_seq_length:
@@ -257,6 +293,7 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
             assert len(input_mask) == max_seq_length
             assert len(segment_ids) == max_seq_length
 
+            # 表示答案在输入序列中的位置。
             start_position = None
             end_position = None
             if is_training:
@@ -276,6 +313,7 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
                     start_position = tok_start_position - doc_start + doc_offset
                     end_position = tok_end_position - doc_start + doc_offset
             if example_index < 5:
+                # 记录日志
                 logger.info("*** Example ***")
                 logger.info("unique_id: %s" % (unique_id))
                 logger.info("example_index: %s" % (example_index))
@@ -318,61 +356,93 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
 
 def _improve_answer_span(doc_tokens, input_start, input_end, tokenizer,
                          orig_answer_text):
-    """Returns tokenized answer spans that better match the annotated answer."""
-    tok_answer_text = " ".join(tokenizer.tokenize(orig_answer_text))
+    """
+    Returns tokenized answer spans that better match the annotated answer.
 
+    _improve_answer_span 的目的是在给定的文档分词(doc_tokens)中,根据一个初始的答案起始位置(input_start)和结束位置(input_end),以及原始答案文本(orig_answer_text)和一个分词器(tokenizer),找到一个更好的、与原始答案文本完全匹配的答案区间。
+    
+    这个过程主要是通过调整起始和结束位置来实现的,以期望找到一个与orig_answer_text经过分词器处理后的文本完全相同的文本片段。
+    """
+
+    # 处理原始答案文本
+    tok_answer_text = " ".join(tokenizer.tokenize(orig_answer_text)) # 分词并连接成一个空格分隔的字符串tok_answer_text
+
+    # 遍历可能的起始和结束位置: 为了在原始答案位置的周围寻找一个更好的匹配。
     for new_start in range(input_start, input_end + 1):
         for new_end in range(input_end, new_start - 1, -1):
-            text_span = " ".join(doc_tokens[new_start:(new_end + 1)])
-            if text_span == tok_answer_text:
-                return (new_start, new_end)
+            # 提取并比较文本片段
+            text_span = " ".join(doc_tokens[new_start:(new_end + 1)]) # 从文档分词中提取一个文本片段,并连接成一个字符串text_span
+            if text_span == tok_answer_text: # 进行比较
+                return (new_start, new_end) # 找到匹配并返回
 
-    return (input_start, input_end)
+    return (input_start, input_end) # 如果遍历完所有可能的位置后都没有找到匹配的文本片段,则返回原始位置
 
 
 def _check_is_max_context(doc_spans, cur_span_index, position):
-    """Check if this is the 'max context' doc span for the token."""
+    """
+    Check if this is the 'max context' doc span for the token.
+    
+    _check_is_max_context 的目的是确定给定的文档片段（doc_spans 中的一个，通过索引 cur_span_index 指定）是否为某个位置（position）的"最大上下文"文档片段。
+    
+    在文本处理或自然语言处理的某些任务中，尤其是问答系统或阅读理解任务中，找到包含问题中提及的实体或短语的最大上下文片段是很重要的，因为这有助于更准确地理解上下文并提供更精确的答案。
+    """
+
+    # 这两个变量将用于跟踪得分最高的文档片段及其索引。
     best_score = None
     best_span_index = None
+
+    # 遍历文档片段
     for (span_index, doc_span) in enumerate(doc_spans):
+        # 检查给定的 position 是否在文档片段内,即起始位置和结束位置中间
         end = doc_span.start + doc_span.length - 1
         if position < doc_span.start:
             continue
         if position > end:
             continue
-        num_left_context = position - doc_span.start
-        num_right_context = end - position
-        score = min(num_left_context, num_right_context) + 0.01 * doc_span.length
+        
+        # 计算左右上下文和得分
+        num_left_context = position - doc_span.start # 该位置左侧的上下文数量
+        num_right_context = end - position # 该位置右侧的上下文数量
+        score = min(num_left_context, num_right_context) + 0.01 * doc_span.length # 计算得分: 取左右上下文数量的最小值，并加上一个小权重 -- 优先考虑包含更多上下文信息的文档片段，同时稍微偏向于更长的片段（尽管权重很小）。
+        # 更新最佳文档片段
         if best_score is None or score > best_score:
             best_score = score
             best_span_index = span_index
 
+    # 比较传入的 cur_span_index（当前考虑的文档片段的索引）和计算出的 best_span_index（得分最高的文档片段的索引）来确定当前文档片段是否为最大上下文文档片段
     return cur_span_index == best_span_index
 
-
+# 名为 RawResult 的 namedtuple，它是 Python 中 collections 模块提供的一个工厂函数，用于创建一个简单的类，这个类可以用来存储和管理一组相关的数据。namedtuple 主要用于创建一个可以通过属性名访问元素内容的元组子类。
+# 在这个例子中，RawResult 被设计用来存储和处理与某个“原始结果”相关的三个主要信息：unique_id、start_logits 和 end_logits
 RawResult = collections.namedtuple("RawResult",
                                    ["unique_id", "start_logits", "end_logits"])
 
 
 def make_predictions(all_examples, all_features, all_results, n_best_size,
                      max_answer_length, do_lower_case, verbose_logging):
-    example_index_to_features = collections.defaultdict(list)
+    """
+    处理从深度学习模型（如BERT等）中获取的问答系统预测结果，并将其转换为更易于理解和使用的格式。具体来说，它接收一系列输入（如所有示例、特征、结果等），并输出每个问题的预测答案以及一系列最佳候选答案的详细信息。
+    """
+    # 初始化数据结构
+    example_index_to_features = collections.defaultdict(list) # example_index_to_features 的作用是将每个 example_index 映射到与其相关的特征列表上。
     for feature in all_features:
         example_index_to_features[feature.example_index].append(feature)
-    unique_id_to_result = {}
+    unique_id_to_result = {} # 映射每个特征的唯一ID到其对应的预测结果
     for result in all_results:
         unique_id_to_result[result.unique_id] = result
     _PrelimPrediction = collections.namedtuple(
         "PrelimPrediction",
-        ["feature_index", "start_index", "end_index", "start_logit", "end_logit"])
+        ["feature_index", "start_index", "end_index", "start_logit", "end_logit"]) # 存储初步预测信息
 
+    # 遍历所有示例
     all_predictions = collections.OrderedDict()
     all_nbest_json = collections.OrderedDict()
-    for (example_index, example) in enumerate(all_examples):
+    for (example_index, example) in enumerate(all_examples): # 对每个example
         features = example_index_to_features[example_index]
         prelim_predictions = []
-        for (feature_index, feature) in enumerate(features):
-            result = unique_id_to_result[feature.unique_id]
+        for (feature_index, feature) in enumerate(features): # 对每个特征列表
+            result = unique_id_to_result[feature.unique_id] # 获取每个特征的预测结果
+            # 根据起始和结束对数的最高得分生成初步预测列表
             start_indexes = _get_best_indexes(result.start_logits, n_best_size)
             end_indexes = _get_best_indexes(result.end_logits, n_best_size)
             for start_index in start_indexes:
@@ -402,13 +472,15 @@ def make_predictions(all_examples, all_features, all_results, n_best_size,
         prelim_predictions = sorted(
             prelim_predictions,
             key=lambda x: (x.start_logit + x.end_logit),
-            reverse=True)
+            reverse=True) # 将初步预测按 起始和结束对数的和 降序排序。
 
         _NbestPrediction = collections.namedtuple(
-            "NbestPrediction", ["text", "start_logit", "end_logit"])
+            "NbestPrediction", ["text", "start_logit", "end_logit"]) # 最终的最佳预测信息
         seen_predictions = {}
+
+        # 生成最佳候选答案 nbest
         nbest = []
-        for pred in prelim_predictions:
+        for pred in prelim_predictions: # 对于每一个初步预测，转换为原始文本
             if len(nbest) >= n_best_size:
                 break
             feature = features[pred.feature_index]
@@ -437,22 +509,34 @@ def make_predictions(all_examples, all_features, all_results, n_best_size,
                     start_logit=pred.start_logit,
                     end_logit=pred.end_logit))
 
-        if not nbest:
+        if not nbest: # 如果没有有效的初步预测，则将文本设为空字符串，并添加一个默认的预测
             nbest.append(
                 _NbestPrediction(text="empty", start_logit=0.0, end_logit=0.0))
         assert len(nbest) >= 1
 
         total_scores = []
         best_non_null_entry = None
-        for entry in nbest:
+        for entry in nbest: # 将最佳候选答案添加到列表中，并确保列表中至少有一个条目（如果没有有效预测，则添加一个空文本条目）
             total_scores.append(entry.start_logit + entry.end_logit)
             if not best_non_null_entry:
                 if entry.text:
                     best_non_null_entry = entry
 
-        probs = _compute_softmax(total_scores)
+        # 计算概率并构建输出
+        """
+        这里使用的Softmax:
+        Softmax 是一种激活函数，它通常用于将一组任意实数转换为归一化的概率分布; 具体地说，Softmax 函数将输入的实数（在这里是 total_scores）转换为介于 0 和 1 之间的数值，这些数值加起来等于 1
+
+        Softmax的作用:
+        **归一化分数: Softmax 确保所有候选答案的分数都被标准化为一个概率分布，这样我们就可以比较它们的相对重要性
+        概率解释: total_scores 通过 Softmax 转换后得到的值 可以被解释为 每个候选答案是正确答案 的"概率" (因为和为1，所以可以被视为概率)
+
+        "最佳候选答案的概率" 指的是 模型 认为某个答案是正确答案的可能性 (模型对每个候选答案是正确答案的置信度)
+        """
+        probs = _compute_softmax(total_scores) # 使用softmax函数计算每个最佳候选答案的概率
         nbest_json = []
         for (i, entry) in enumerate(nbest):
+            # 对于每个最佳候选答案，构建包含文本、概率、起始对数和结束对数的有序字典，并将这些字典添加到nbest_json列表中。
             output = collections.OrderedDict()
             output["text"] = entry.text
             output["probability"] = probs[i]
@@ -460,15 +544,21 @@ def make_predictions(all_examples, all_features, all_results, n_best_size,
             output["end_logit"] = entry.end_logit
             nbest_json.append(output)
 
+        # 将每个示例的最佳答案（nbest_json列表中的第一个条目）的文本存储到all_predictions字典中，并将完整的nbest_json列表存储到all_nbest_json字典中，使用示例的qas_id作为键
         assert len(nbest_json) >= 1
         all_predictions[example.qas_id] = nbest_json[0]["text"]
         all_nbest_json[example.qas_id] = nbest_json
 
-    return all_predictions, all_nbest_json
+    return all_predictions, all_nbest_json 
+    # all_predictions（包含每个示例的最佳答案文本）和all_nbest_json（包含每个示例的最佳候选答案的详细信息）
 
 
 def get_final_text(pred_text, orig_text, do_lower_case, verbose_logging=False):
-    """Project the tokenized prediction back to the original text."""
+    """
+    Project the tokenized prediction back to the original text.
+    
+    主要目的是将一个经过分词器（tokenizer）处理后的预测文本（pred_text）映射回原始文本（orig_text）中的相应位置。这在自然语言处理（NLP）任务中很常见，特别是在文本生成或文本修改任务中，模型可能输出分词后的文本，但我们需要将这些分词后的文本转换回原始的、未经分词的文本格式。
+    """
 
     def _strip_spaces(text):
         ns_chars = []

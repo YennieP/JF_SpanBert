@@ -746,80 +746,113 @@ def main(args):
     logger.info("device: {} n_gpu: {}, 16-bits training: {}".format(
         device, n_gpu, args.fp16))
 
+    # 梯度累积步骤参数验证 (gradient_accumulation_steps)
+    """
+    这段代码检查 gradient_accumulation_steps 是否小于 1。因为累积步骤的最小有效值应该是 1（表示不累积，直接进行每批次的反向传播和更新）。如果该值小于 1，程序会抛出一个 ValueError 异常，指出无效的参数
+    """
     if args.gradient_accumulation_steps < 1:
         raise ValueError("Invalid gradient_accumulation_steps parameter: {}, should be >= 1".format(
                             args.gradient_accumulation_steps))
 
     args.train_batch_size = args.train_batch_size // args.gradient_accumulation_steps
 
+    # 随机数种子设置: 目的是为了控制训练过程中的随机性，确保实验的可重复性
     random.seed(args.seed)
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
     if n_gpu > 0:
         torch.cuda.manual_seed_all(args.seed)
 
+    # 训练和评估参数验证: 目的是防止用户在调用脚本时忘记指定任务。如果既不训练也不评估，代码将没有任何实际操作
     if not args.do_train and not args.do_eval:
         raise ValueError("At least one of `do_train` or `do_eval` must be True.")
 
+    # 输出目录的准备
     if not os.path.exists(args.output_dir):
-        os.makedirs(args.output_dir)
+        os.makedirs(args.output_dir) # 检查指定的输出目录是否存在。如果不存在，它会使用 os.makedirs 创建该目录。
     if args.do_train:
         logger.addHandler(logging.FileHandler(os.path.join(args.output_dir, "train.log"), 'w'))
     else:
         logger.addHandler(logging.FileHandler(os.path.join(args.output_dir, "eval.log"), 'w'))
     logger.info(args)
 
-    task_name = args.task_name.lower()
+    task_name = args.task_name.lower() # 从命令行参数 args.task_name 获取任务名称，并将其转换为小写
 
+    # 任务存在性检查
     if task_name not in PROCESSORS:
         raise ValueError("Task not found: %s" % (task_name))
 
+    # 初始化数据处理器 (processor)
     processor = PROCESSORS[task_name]()
     label_list = processor.get_labels()
     id2label = {i: label for i, label in enumerate(label_list)}
     num_labels = len(label_list)
     eval_metric = EVAL_METRICS[task_name]
 
+    # 初始化分词器 (tokenizer)
     tokenizer = BertTokenizer.from_pretrained(args.model, do_lower_case=args.do_lower_case)
 
+    # 准备开发集数据 (eval_examples 和 eval_features)
     if args.do_train or (not args.eval_test):
         if task_name == "mnli":
-            eval_examples = processor.get_dev_examples(args.data_dir, eval_set=args.eval_set)
+            # 从指定数据目录中加载开发集（验证集）数据
+            # 如果任务是 "mnli"，开发集数据可能有多个版本（如 "matched" 和 "mismatched"），因此可能需要根据 args.eval_set 加载不同的子集
+            eval_examples = processor.get_dev_examples(args.data_dir, eval_set=args.eval_set) 
         else:
+            # 从指定数据目录中加载开发集（验证集）数据
             eval_examples = processor.get_dev_examples(args.data_dir)
+        # 将开发集示例转换为模型输入所需的特征格式（例如，token IDs、注意力掩码等）
         eval_features = convert_examples_to_features(
             eval_examples, label_list, args.max_seq_length, tokenizer, OUTPUT_MODES[task_name])
         logger.info("***** Dev *****")
         logger.info("  Num examples = %d", len(eval_examples))
         logger.info("  Batch size = %d", args.eval_batch_size)
-        all_input_ids = torch.tensor([f.input_ids for f in eval_features], dtype=torch.long)
-        all_input_mask = torch.tensor([f.input_mask for f in eval_features], dtype=torch.long)
-        all_segment_ids = torch.tensor([f.segment_ids for f in eval_features], dtype=torch.long)
+        # 将特征转换为张量 (Tensor)
+        all_input_ids = torch.tensor([f.input_ids for f in eval_features], dtype=torch.long) # 输入文本的 token IDs
+        all_input_mask = torch.tensor([f.input_mask for f in eval_features], dtype=torch.long) # 用于指示哪些 token 是实际输入（而不是填充）
+        all_segment_ids = torch.tensor([f.segment_ids for f in eval_features], dtype=torch.long) # 用于区分输入中的不同句子（例如，对于句子对任务）
 
-        if OUTPUT_MODES[task_name] == "classification":
+        # 处理标签 (all_label_ids): 据任务的输出模式（分类或回归）处理标签数据
+        if OUTPUT_MODES[task_name] == "classification": 
+            # 将标签 ID 转换为 long 类型的 Tensor
             all_label_ids = torch.tensor([f.label_id for f in eval_features], dtype=torch.long)
         elif OUTPUT_MODES[task_name] == "regression":
+            # 将标签 ID 转换为 float 类型的 Tensor
             all_label_ids = torch.tensor([f.label_id for f in eval_features], dtype=torch.float)
             if args.fp16:
+                # 如果启用了半精度训练（args.fp16），则将标签进一步转换为半精度浮点数
                 all_label_ids = all_label_ids.half()
 
+        # 创建数据集和数据加载器 (eval_data, eval_dataloader)
         eval_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids)
         eval_dataloader = DataLoader(eval_data, batch_size=args.eval_batch_size)
         eval_label_ids = all_label_ids
 
+    # 加载训练数据 (train_examples)
     if args.do_train:
         train_examples = processor.get_train_examples(args.data_dir)
+        # 转换训练特征 (train_features): 将训练样例转换为模型可以处理的特征格式
         train_features = convert_examples_to_features(
             train_examples, label_list, args.max_seq_length, tokenizer, OUTPUT_MODES[task_name])
+        """
+        args.max_seq_length: 指定输入序列的最大长度。
+        tokenizer: 使用之前初始化的 BERT 分词器进行文本的分词和编码。
+        OUTPUT_MODES[task_name]: 根据任务的输出模式（如分类或回归）决定特征转换的方式
+        """
+        # 训练数据排序或打乱 (train_features)
         if args.train_mode == 'sorted' or args.train_mode == 'random_sorted':
+            # 根据 input_mask 的总和进行排序。input_mask 总和表示有效输入 token 的数量，排序的目的是为了更好地处理填充序列（padding sequence）。
             train_features = sorted(train_features, key=lambda f: np.sum(f.input_mask))
         else:
+            # 随机打乱训练数据顺序，以确保训练过程中的样本顺序是随机的。
             random.shuffle(train_features)
 
+        # 将训练特征转换为张量 (Tensor)
         all_input_ids = torch.tensor([f.input_ids for f in train_features], dtype=torch.long)
         all_input_mask = torch.tensor([f.input_mask for f in train_features], dtype=torch.long)
         all_segment_ids = torch.tensor([f.segment_ids for f in train_features], dtype=torch.long)
 
+        # 处理标签 (all_label_ids)
         if OUTPUT_MODES[task_name] == "classification":
             all_label_ids = torch.tensor([f.label_id for f in train_features], dtype=torch.long)
         elif OUTPUT_MODES[task_name] == "regression":
@@ -827,11 +860,14 @@ def main(args):
             if args.fp16:
                 all_label_ids = all_label_ids.half()
 
+        # 创建数据集和数据加载器 (train_data, train_dataloader)
         train_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids)
         train_dataloader = DataLoader(train_data, batch_size=args.train_batch_size, drop_last=True)
         train_batches = [batch for batch in train_dataloader]
+        # 计算评估步数 (eval_step): 根据训练数据的批次数量和每个 epoch 进行评估的次数（args.eval_per_epoch），确定每多少个训练批次后进行一次模型评估
         eval_step = max(1, len(train_batches) // args.eval_per_epoch)
 
+        # 计算训练优化步数 (num_train_optimization_steps): 决定训练过程中的优化次数。这个值与训练数据的批次数量、梯度累积步数（args.gradient_accumulation_steps），以及训练的 epoch 数（args.num_train_epochs）有关
         num_train_optimization_steps = \
             len(train_dataloader) // args.gradient_accumulation_steps * args.num_train_epochs
 
@@ -840,14 +876,23 @@ def main(args):
         logger.info("  Batch size = %d", args.train_batch_size)
         logger.info("  Num steps = %d", num_train_optimization_steps)
 
+        # 初始化学习率列表 (lrs)
         best_result = None
         lrs = [args.learning_rate] if args.learning_rate else \
-            [1e-6, 2e-6, 3e-6, 5e-6, 1e-5, 2e-5, 3e-5, 5e-5]
+            [1e-6, 2e-6, 3e-6, 5e-6, 1e-5, 2e-5, 3e-5, 5e-5] # 一组学习率，用于在不同学习率下进行模型训练
         for lr in lrs:
             cache_dir = args.cache_dir if args.cache_dir else \
                 PYTORCH_PRETRAINED_BERT_CACHE
+            # 从预训练的 BERT 模型中加载 BertForSequenceClassification 模型，该模型已经针对分类任务进行了优化
             model = BertForSequenceClassification.from_pretrained(
-                args.model, cache_dir=cache_dir, num_labels=num_labels)
+                args.model, cache_dir=cache_dir, num_labels=num_labels) # 加载预训练模型 (BertForSequenceClassification)
+            """
+            args.model:指定要加载的预训练模型的名称或路径。
+            cache_dir:指定缓存目录，存放下载的预训练模型文件。如果未指定，使用默认缓存目录 PYTORCH_PRETRAINED_BERT_CACHE。
+            num_labels:设置模型的输出类别数，通常对应于任务的标签数。
+            """
+
+            # 处理半精度训练和多 GPU 设置
             if args.fp16:
                 model.half()
             model.to(device)
