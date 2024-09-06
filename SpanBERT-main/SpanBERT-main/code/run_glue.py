@@ -900,16 +900,33 @@ def main(args):
                 model = torch.nn.DataParallel(model)
 
             # Prepare optimizer
+            """
+            为训练过程准备优化器（optimizer），以便在训练过程中更新模型的参数。优化器在训练神经网络时至关重要，因为它决定了模型参数如何根据损失函数的梯度进行调整。
+            """
+
+            # model.named_parameters(): 获取模型中所有需要优化的参数，并将它们转换为一个包含 (name, parameter) 元组的列表。这些参数包括模型的权重、偏置项等
             param_optimizer = list(model.named_parameters())
-            no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
+
+            # 设置不进行权重衰减的参数 (no_decay)
+            # weight decay：是一种正则化技术，用于防止模型过拟合。它通过在每次更新时对权重施加一个衰减因子，使权重逐渐减小。
+            no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight'] # no_decay：定义了一组参数名称, 这些参数通常不需要进行权重衰减（weight decay）。
+
+            # 分组优化器参数 (optimizer_grouped_parameters)
             optimizer_grouped_parameters = [
+                # 包括模型中所有不在 no_decay 列表中的参数。对于这些参数，设置 weight_decay 为 0.01，即每次更新时都会施加权重衰减。
                 {'params': [p for n, p in param_optimizer
                             if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
+                # 包括模型中在 no_decay 列表中的参数（如 bias 和 LayerNorm 参数）。对于这些参数，不进行权重衰减（weight_decay = 0.0）
                 {'params': [p for n, p in param_optimizer
                             if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
                 ]
+            
+            # 处理半精度训练 (fp16)
             if args.fp16:
                 try:
+                    """
+                    apex: 是由 NVIDIA 提供的一个库，用于混合精度训练和分布式训练。FP16_Optimizer 和 FusedAdam 是 apex 提供的优化器，专门用于半精度训练。
+                    """
                     from apex.optimizers import FP16_Optimizer
                     from apex.optimizers import FusedAdam
                 except ImportError:
